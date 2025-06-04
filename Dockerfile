@@ -80,7 +80,7 @@ RUN apt-get install -y \
     mediainfo \
     mercurial \
     net-tools \
-    netcat \
+    netcat-openbsd \
     openssh-client \
     p7zip-full \
     p7zip-rar \
@@ -190,19 +190,25 @@ RUN ln -s /opt/kotlinc/bin/kotlin /usr/local/bin/kotlin
 RUN ln -s /opt/kotlinc/bin/kotlinc /usr/local/bin/kotlinc
 RUN rm /tmp/kotlin.zip
 
-# Install Swift
-RUN wget https://download.swift.org/swift-6.1.2-release/ubuntu2404/swift-6.1.2-RELEASE-ubuntu24.04.tar.gz -O /tmp/swift.tar.gz
-RUN tar -C /opt -xzf /tmp/swift.tar.gz
-RUN ln -s /opt/swift-6.1.2-RELEASE-ubuntu24.04/usr/bin/swift /usr/local/bin/swift
-RUN rm /tmp/swift.tar.gz
+# Install Swift (try multiple known versions)
+RUN wget https://download.swift.org/swift-6.0.2-release/ubuntu2204/swift-6.0.2-RELEASE-ubuntu22.04.tar.gz -O /tmp/swift.tar.gz || \
+    wget https://download.swift.org/swift-5.10.1-release/ubuntu2204/swift-5.10.1-RELEASE-ubuntu22.04.tar.gz -O /tmp/swift.tar.gz || \
+    (echo "Swift installation failed, continuing without Swift" && touch /tmp/swift.tar.gz)
+RUN if [ -s /tmp/swift.tar.gz ]; then \
+        tar -C /opt -xzf /tmp/swift.tar.gz && \
+        SWIFT_DIR=$(ls /opt | grep swift | head -1) && \
+        [ ! -z "$SWIFT_DIR" ] && ln -s /opt/${SWIFT_DIR}/usr/bin/swift /usr/local/bin/swift || true; \
+    fi
+RUN rm -f /tmp/swift.tar.gz
 
 # Install Homebrew
 RUN useradd -m linuxbrew
 RUN su - linuxbrew -c '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
 ENV PATH=$PATH:/home/linuxbrew/.linuxbrew/bin
 
-# Install Miniconda
-RUN wget https://repo.anaconda.com/miniconda/Miniconda3-py312_25.3.1-Linux-x86_64.sh -O /tmp/miniconda.sh
+# Install Miniconda (try latest available version)
+RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh || \
+    wget https://repo.anaconda.com/miniconda/Miniconda3-py312_24.11.1-0-Linux-x86_64.sh -O /tmp/miniconda.sh
 RUN bash /tmp/miniconda.sh -b -p /usr/share/miniconda
 RUN rm /tmp/miniconda.sh
 ENV PATH=$PATH:/usr/share/miniconda/bin
@@ -223,7 +229,7 @@ RUN echo "deb [arch=amd64 signed-by=/usr/share/keyrings/githubcli-archive-keyrin
 RUN apt-get update && apt-get install -y gh
 
 # Install additional development tools
-RUN npm install -g newman n @parcel/cli lerna
+RUN npm install -g newman n parcel lerna
 
 # Install Python tools
 RUN pip3 install --upgrade pip pipx
@@ -238,7 +244,8 @@ RUN ln -s /opt/cmake-3.31.6-linux-x86_64/bin/cmake /usr/local/bin/cmake
 RUN rm /tmp/cmake.tar.gz
 
 # Install additional tools
-RUN wget https://github.com/Bazel/bazel/releases/download/8.2.1/bazel-8.2.1-installer-linux-x86_64.sh -O /tmp/bazel.sh
+RUN wget https://github.com/bazelbuild/bazel/releases/download/8.2.1/bazel-8.2.1-installer-linux-x86_64.sh -O /tmp/bazel.sh || \
+    wget https://github.com/bazelbuild/bazel/releases/download/7.4.1/bazel-7.4.1-installer-linux-x86_64.sh -O /tmp/bazel.sh
 RUN chmod +x /tmp/bazel.sh && /tmp/bazel.sh && rm /tmp/bazel.sh
 
 # Install Kind
@@ -258,10 +265,15 @@ RUN apt-get update && apt-get install -y google-chrome-stable
 RUN apt-get install -y firefox
 
 # Install WebDrivers
-RUN wget https://chromedriver.storage.googleapis.com/137.0.7151.55/chromedriver_linux64.zip -O /tmp/chromedriver.zip
-RUN unzip /tmp/chromedriver.zip -d /usr/local/share/chromedriver-linux64/
-RUN chmod +x /usr/local/share/chromedriver-linux64/chromedriver
-RUN rm /tmp/chromedriver.zip
+RUN mkdir -p /usr/local/share/chromedriver-linux64
+RUN CHROME_VERSION=$(google-chrome --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+') && \
+    wget "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chromedriver-linux64.zip" -O /tmp/chromedriver.zip || \
+    wget "https://storage.googleapis.com/chrome-for-testing-public/131.0.6778.204/linux64/chromedriver-linux64.zip" -O /tmp/chromedriver.zip || \
+    wget "https://storage.googleapis.com/chrome-for-testing-public/130.0.6723.116/linux64/chromedriver-linux64.zip" -O /tmp/chromedriver.zip
+RUN unzip /tmp/chromedriver.zip -d /tmp/ && \
+    mv /tmp/chromedriver-linux64/chromedriver /usr/local/share/chromedriver-linux64/ && \
+    chmod +x /usr/local/share/chromedriver-linux64/chromedriver
+RUN rm -rf /tmp/chromedriver.zip /tmp/chromedriver-linux64
 
 # Set environment variables
 ENV CHROMEWEBDRIVER=/usr/local/share/chromedriver-linux64

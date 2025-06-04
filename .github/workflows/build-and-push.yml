@@ -1,0 +1,214 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/ubuntu-runner
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      image-tags: ${{ steps.meta.outputs.tags }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=ref,event=tag
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value={{date 'YYYY.MM.DD'}},enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=Ubuntu Runner
+            org.opencontainers.image.description=Ubuntu 24.04 with development tools
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+
+      - name: Generate SBOM
+        if: github.event_name != 'pull_request'
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          artifact-name: sbom.spdx.json
+          output-file: ./sbom.spdx.json
+
+      - name: Upload SBOM
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: ./sbom.spdx.json
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    strategy:
+      matrix:
+        test-type: [basic, tools, languages]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run image tests
+        run: |
+          # Pull the built image
+          docker pull ${{ needs.build.outputs.image-tags }}
+          
+          case "${{ matrix.test-type }}" in
+            basic)
+              echo "Testing basic functionality..."
+              docker run --rm ${{ needs.build.outputs.image-tags }} bash -c "
+                set -e
+                echo 'Testing basic commands...'
+                which git && git --version
+                which curl && curl --version
+                which jq && jq --version
+                which docker && docker --version
+                echo 'Basic tests passed!'
+              "
+              ;;
+            tools)
+              echo "Testing development tools..."
+              docker run --rm ${{ needs.build.outputs.image-tags }} bash -c "
+                set -e
+                echo 'Testing development tools...'
+                which kubectl && kubectl version --client
+                which helm && helm version
+                which aws && aws --version
+                which az && az --version
+                which gh && gh --version
+                which terraform && terraform --version
+                echo 'Tool tests passed!'
+              "
+              ;;
+            languages)
+              echo "Testing language runtimes..."
+              docker run --rm ${{ needs.build.outputs.image-tags }} bash -c "
+                set -e
+                echo 'Testing language runtimes...'
+                which node && node --version
+                which python3 && python3 --version
+                which go && go version
+                which rustc && rustc --version
+                which java && java --version
+                which julia && julia --version
+                which kotlin && kotlin -version
+                which swift && swift --version
+                echo 'Language tests passed!'
+              "
+              ;;
+          esac
+
+  security-scan:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Grype vulnerability scanner
+        uses: anchore/scan-action@v4
+        id: scan
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          fail-build: false
+          severity-cutoff: high
+
+      - name: Upload Grype scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: ${{ steps.scan.outputs.sarif }}
+
+  release:
+    needs: [build, test, security-scan]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Create release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.run_number }}
+          release_name: Ubuntu Runner v${{ github.run_number }}
+          body: |
+            ## Ubuntu Runner Image
+            
+            Updated Ubuntu 24.04 image with latest development tools and packages.
+            
+            ### Built Images
+            ```
+            ${{ needs.build.outputs.image-tags }}
+            ```
+            
+            ### Image Digest
+            ```
+            ${{ needs.build.outputs.image-digest }}
+            ```
+            
+            ### Usage
+            ```bash
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            docker run -it ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ```
+          draft: false
+          prerelease: false

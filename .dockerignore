@@ -1,0 +1,55 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+*.md
+docs/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Runtime
+node_modules/
+.npm
+.cache
+.local
+
+# Build artifacts
+build/
+dist/
+target/
+*.o
+*.a
+*.so
+
+# Test
+coverage/
+.nyc_output
+test-results/
+.pytest_cache/
+
+# Temporary
+tmp/
+temp/
+*.tmp

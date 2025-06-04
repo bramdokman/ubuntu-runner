@@ -17,8 +17,11 @@ RUN apt-get update && apt-get install -y \
     unzip \
     build-essential
 
-# Install Microsoft packages repository
-RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-archive-keyring.gpg
+# Install Microsoft packages repository (with retry for ARM64 builds)
+RUN for i in 1 2 3; do \
+        curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-archive-keyring.gpg && break || \
+        (echo "Attempt $i failed, retrying..." && sleep 5); \
+    done
 RUN echo "deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/microsoft-archive-keyring.gpg] https://packages.microsoft.com/repos/microsoft-ubuntu-noble-prod noble main" | tee /etc/apt/sources.list.d/microsoft-prod.list
 
 # Install Docker repository

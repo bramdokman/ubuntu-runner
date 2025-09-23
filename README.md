@@ -1,8 +1,33 @@
 # Ubuntu Runner Docker Image
 
+[![Docker Image CI](https://github.com/your-org/ubuntu-runner/actions/workflows/build-and-push.yml/badge.svg)](https://github.com/your-org/ubuntu-runner/actions/workflows/build-and-push.yml)
+[![Weekly Updates](https://github.com/your-org/ubuntu-runner/actions/workflows/update-image.yml/badge.svg)](https://github.com/your-org/ubuntu-runner/actions/workflows/update-image.yml)
+[![Docker Pulls](https://img.shields.io/docker/pulls/ghcr.io/your-org/ubuntu-runner)](https://github.com/your-org/ubuntu-runner/pkgs/container/ubuntu-runner)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A comprehensive Ubuntu 24.04 Docker image with development tools, languages, and CLI utilities - automatically updated via GitHub Actions.
 
-## Features
+## 📚 Documentation
+
+- [API Documentation](docs/API.md) - Detailed API and environment variable reference
+- [Setup Guide](docs/SETUP.md) - Installation and configuration instructions
+- [Contributing Guidelines](CONTRIBUTING.md) - How to contribute to the project
+- [Changelog](CHANGELOG.md) - Version history and updates
+
+## 🚀 Quick Start
+
+```bash
+# Pull the latest image
+docker pull ghcr.io/your-org/ubuntu-runner:latest
+
+# Run interactively
+docker run -it ghcr.io/your-org/ubuntu-runner:latest bash
+
+# Run with volume mounting
+docker run -it -v $(pwd):/workspace ghcr.io/your-org/ubuntu-runner:latest bash
+```
+
+## ✨ Features
 
 This image includes all the software from the Ubuntu 24.04 GitHub Actions runner:
 
@@ -39,7 +64,9 @@ This image includes all the software from the Ubuntu 24.04 GitHub Actions runner
 - **MySQL** 8.0.42
 - **SQLite** 3.45.1
 
-## Usage
+## 📦 Installation & Usage
+
+For detailed setup instructions, see the [Setup Guide](docs/SETUP.md).
 
 ### Pull and Run
 ```bash
@@ -74,7 +101,7 @@ services:
     command: bash
 ```
 
-## Automatic Updates
+## 🔄 Automatic Updates
 
 This image is automatically updated every Monday at 6 AM UTC via GitHub Actions:
 
@@ -89,7 +116,9 @@ You can trigger an update manually:
 gh workflow run update-image.yml
 ```
 
-## Environment Variables
+## 🔧 Configuration
+
+### Environment Variables
 
 Key environment variables set in the image:
 
@@ -107,7 +136,11 @@ Homebrew is installed but not in PATH by default:
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 ```
 
-## Building Locally
+### Available Tools & Versions
+
+For a complete list of installed tools and their versions, see the [API Documentation](docs/API.md).
+
+## 🏗️ Building Locally
 
 ```bash
 git clone <this-repo>
@@ -115,20 +148,31 @@ cd ubuntu-runner
 docker build -t ubuntu-runner .
 ```
 
-## Contributing
+## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test with the provided workflows
-5. Submit a pull request
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for detailed instructions on how to:
 
-## License
+- Report bugs and request features
+- Set up your development environment
+- Submit pull requests
+- Follow our coding standards
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+## 📄 License
 
-## Support
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-- Create an issue for bug reports or feature requests
-- Check the [GitHub Actions logs](../../actions) for build status
-- Review [security advisories](../../security/advisories) for known vulnerabilities
+## 💬 Support
+
+- **Issues**: [Report bugs or request features](../../issues)
+- **Discussions**: [Ask questions and share ideas](../../discussions)
+- **Build Status**: [GitHub Actions logs](../../actions)
+- **Security**: [Security advisories](../../security/advisories) for known vulnerabilities
+
+## 🙏 Acknowledgments
+
+This project is inspired by the GitHub Actions runner images and aims to provide a similar environment for local development and CI/CD pipelines.
+
+## 🔗 Related Projects
+
+- [GitHub Actions Virtual Environments](https://github.com/actions/virtual-environments)
+- [Docker Official Images](https://github.com/docker-library/official-images)

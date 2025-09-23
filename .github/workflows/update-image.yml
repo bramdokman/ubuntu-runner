@@ -1,6 +1,7 @@
+---
 name: Update Ubuntu Runner Image
 
-on:
+'on':
   schedule:
     # Run every day at 6 AM UTC
     - cron: '0 6 * * *'
@@ -35,10 +36,12 @@ jobs:
             upgradable=\$(apt list --upgradable 2>/dev/null | grep -v 'WARNING' | wc -l)
             if [ \$upgradable -gt 1 ]; then
               echo 'has_updates=true' >> \$GITHUB_OUTPUT
-              echo 'update_summary=Found \$upgradable package updates available' >> \$GITHUB_OUTPUT
+              echo 'update_summary=Found \$upgradable updates' \
+                >> \$GITHUB_OUTPUT
             else
               echo 'has_updates=false' >> \$GITHUB_OUTPUT
-              echo 'update_summary=No package updates available' >> \$GITHUB_OUTPUT
+              echo 'update_summary=No updates available' \
+                >> \$GITHUB_OUTPUT
             fi
           "
 
@@ -46,11 +49,14 @@ jobs:
         id: external_check
         run: |
           # Check for updates to external tools (simplified check)
-          ./scripts/check-external-updates.sh || echo "External update check completed"
+          ./scripts/check-external-updates.sh || \
+            echo "External update check completed"
 
   build-and-push:
     needs: check-updates
-    if: needs.check-updates.outputs.has_updates == 'true' || github.event.inputs.force_rebuild == 'true'
+    if: >
+      needs.check-updates.outputs.has_updates == 'true' ||
+      github.event.inputs.force_rebuild == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -97,12 +103,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: v${{ github.run_number }}-${{ github.run_attempt }}
-          release_name: Ubuntu Runner v${{ github.run_number }}-${{ github.run_attempt }}
+          release_name: >
+            Ubuntu Runner
+            v${{ github.run_number }}-${{ github.run_attempt }}
           body: |
             Updated Ubuntu Runner image with latest packages.
-            
+
             ${{ needs.check-updates.outputs.update_summary }}
-            
             Docker images:
             ${{ steps.meta.outputs.tags }}
           draft: false
@@ -136,7 +143,8 @@ jobs:
           if [ "${{ needs.build-and-push.result }}" == "success" ]; then
             echo "✅ Ubuntu Runner image updated successfully"
             echo "${{ needs.check-updates.outputs.update_summary }}"
-          elif [ "${{ needs.check-updates.outputs.has_updates }}" == "false" ]; then
+          elif [ "${{ needs.check-updates.outputs.has_updates }}" \
+              == "false" ]; then
             echo "ℹ️ No updates available, skipping build"
           else
             echo "❌ Build failed"

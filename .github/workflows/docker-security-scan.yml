@@ -1,0 +1,80 @@
+---
+name: Docker Security Scan
+
+'on':
+  workflow_call:
+    inputs:
+      image:
+        description: 'Docker image to scan'
+        required: true
+        type: string
+      registry:
+        description: 'Container registry'
+        default: 'ghcr.io'
+        required: false
+        type: string
+
+jobs:
+  trivy-scan:
+    name: Trivy Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ inputs.registry }}/${{ inputs.image }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          vuln-type: 'os,library'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: 'trivy'
+
+  grype-scan:
+    name: Grype Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - name: Run Grype vulnerability scanner
+        uses: anchore/scan-action@v4
+        id: scan
+        with:
+          image: ${{ inputs.registry }}/${{ inputs.image }}
+          fail-build: false
+          severity-cutoff: high
+          output-format: sarif
+
+      - name: Upload Grype results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: ${{ steps.scan.outputs.sarif }}
+          category: 'grype'
+
+  scan-summary:
+    name: Security Scan Summary
+    needs: [trivy-scan, grype-scan]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Generate scan summary
+        run: |
+          echo "## Security Scan Summary"
+          echo "- Trivy scan: ${{ needs.trivy-scan.result }}"
+          echo "- Grype scan: ${{ needs.grype-scan.result }}"
+
+          if [ "${{ needs.trivy-scan.result }}" = "failure" ] || \
+             [ "${{ needs.grype-scan.result }}" = "failure" ]; then
+            echo "⚠️  Security vulnerabilities detected"
+            exit 1
+          else
+            echo "✅ Security scans passed"
+          fi

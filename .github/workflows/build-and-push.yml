@@ -1,6 +1,7 @@
+---
 name: Build and Push Docker Image
 
-on:
+'on':
   push:
     branches:
       - main
@@ -50,7 +51,7 @@ jobs:
             type=raw,value={{date 'YYYY.MM.DD'}},enable={{is_default_branch}}
           labels: |
             org.opencontainers.image.title=Ubuntu Runner
-            org.opencontainers.image.description=Ubuntu 24.04 with development tools
+            org.opencontainers.image.description=Ubuntu 24.04 with tools
             org.opencontainers.image.vendor=${{ github.repository_owner }}
 
       - name: Set up Docker Buildx
@@ -102,7 +103,6 @@ jobs:
         run: |
           # Pull the built image
           docker pull ${{ needs.build.outputs.image-tags }}
-          
           case "${{ matrix.test-type }}" in
             basic)
               echo "Testing basic functionality..."
@@ -194,23 +194,22 @@ jobs:
           release_name: Ubuntu Runner v${{ github.run_number }}
           body: |
             ## Ubuntu Runner Image
-            
+
             Updated Ubuntu 24.04 image with latest development tools and packages.
-            
             ### Built Images
             ```
             ${{ needs.build.outputs.image-tags }}
             ```
-            
             ### Image Digest
             ```
             ${{ needs.build.outputs.image-digest }}
             ```
-            
             ### Usage
             ```bash
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            docker run -it ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            docker pull \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            docker run -it \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ```
           draft: false
           prerelease: false

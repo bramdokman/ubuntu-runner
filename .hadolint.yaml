@@ -1,0 +1,39 @@
+# Hadolint configuration for Docker static analysis
+# https://github.com/hadolint/hadolint
+
+# Ignore specific rules
+ignored:
+  - DL3008  # Pin versions in apt get install (disabled for latest updates)
+  - DL3009  # Delete apt lists after install (handled at the end)
+  - DL3015  # Avoid additional packages (comprehensive image needs many packages)
+  - SC1091  # Not following sourced files
+
+# Trusted registries for FROM instructions
+trustedRegistries:
+  - docker.io
+  - ghcr.io
+  - registry.hub.docker.com
+
+# Maximum line length
+line-length: 120
+
+# Severity levels for rules
+override:
+  error:
+    - DL3001  # Forbidden commands (sudo, ssh, vim)
+    - DL3002  # Last user should not be root
+    - DL4006  # Set SHELL option for pipes
+  warning:
+    - DL3003  # Use WORKDIR instead of cd
+    - DL3004  # Do not use sudo
+    - DL3007  # Using latest tag
+    - DL3018  # Pin versions in apk add
+    - DL3019  # Use --no-cache instead of rm /var/cache/apk/*
+    - DL3020  # Use COPY instead of ADD for files and folders
+  info:
+    - DL3025  # Use arguments in CMD as JSON notation
+    - DL3027  # Do not use apt
+    - DL3029  # Do not use --platform flag
+  style:
+    - DL3026  # Use heredoc syntax for RUN commands
+    - DL3028  # Pin version in gem install

@@ -1,0 +1,21 @@
+# ShellCheck configuration
+# https://www.shellcheck.net/
+
+# Set minimum severity level
+# error, warning, info, style
+min-severity: warning
+
+# Enable additional checks
+enable:
+  - all
+
+# Exclude specific checks
+exclude:
+  - SC2086  # Double quote to prevent globbing (sometimes intentional)
+  - SC2230  # which is non-standard (we use standard Ubuntu)
+
+# Shell dialect
+shell: bash
+
+# External sources
+external-sources: true

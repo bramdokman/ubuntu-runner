@@ -1,125 +1,224 @@
 #!/bin/bash
-
 # Script to check for updates to external tools and packages
+# This script checks GitHub releases and other sources for newer versions
+
 set -euo pipefail
 
-echo "Checking for external tool updates..."
+# Configuration
+readonly SCRIPT_NAME="$(basename "$0")"
+readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+readonly VERSION_FILE="${SCRIPT_DIR}/../versions.env"
+
+# Color codes for output formatting
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[1;33m'
+readonly NC='\033[0m' # No Color
+
+# Counters
+declare -i updates_found=0
+declare -i checks_performed=0
+declare -a update_messages=()
+
+# Error handling
+trap 'error_handler $? $LINENO' ERR
+
+error_handler() {
+    local exit_code=$1
+    local line_number=$2
+    echo -e "${RED}Error occurred on line $line_number with exit code $exit_code${NC}" >&2
+    exit "$exit_code"
+}
+
+# Logging functions
+log_info() {
+    echo -e "${GREEN}ℹ️ $*${NC}"
+}
+
+log_warning() {
+    echo -e "${YELLOW}⚠️ $*${NC}"
+}
+
+log_error() {
+    echo -e "${RED}❌ $*${NC}" >&2
+}
+
+log_update() {
+    echo -e "${GREEN}📦 $*${NC}"
+    update_messages+=("$*")
+}
 
 # Function to check GitHub releases for latest version
 check_github_release() {
-    local repo="$1"
-    local current_version="$2"
-    
-    latest=$(curl -s "https://api.github.com/repos/$repo/releases/latest" | jq -r '.tag_name' | sed 's/^v//')
-    if [ "$latest" != "$current_version" ]; then
-        echo "📦 $repo: $current_version → $latest"
+    local repo="${1}"
+    local current_version="${2}"
+    local name="${3:-$repo}"
+
+    ((checks_performed++))
+
+    # Rate limiting protection
+    sleep 0.5
+
+    # Fetch latest release info
+    local api_url="https://api.github.com/repos/${repo}/releases/latest"
+    local response
+
+    if ! response=$(curl -s -f -H "Accept: application/vnd.github.v3+json" "$api_url" 2>/dev/null); then
+        log_warning "Failed to fetch release info for ${name}"
+        return 1
+    fi
+
+    # Parse version from response
+    local latest_version
+    latest_version=$(echo "$response" | jq -r '.tag_name // empty' | sed 's/^v//')
+
+    if [[ -z "$latest_version" ]]; then
+        log_warning "Could not determine latest version for ${name}"
+        return 1
+    fi
+
+    # Compare versions
+    if [[ "$latest_version" != "$current_version" ]]; then
+        log_update "${name}: ${current_version} → ${latest_version}"
+        ((updates_found++))
         return 0
     fi
+
     return 1
 }
 
-# Function to check direct download versions
-check_direct_version() {
+# Function to check versions with custom API endpoints
+check_custom_version() {
     local name="$1"
-    local url="$2"
+    local check_command="$2"
     local current_version="$3"
-    
-    # This is a simplified check - in practice you'd parse the version from the URL response
-    echo "ℹ️ Checking $name (current: $current_version) - manual verification needed"
+
+    ((checks_performed++))
+
+    local latest_version
+    if ! latest_version=$(eval "$check_command" 2>/dev/null); then
+        log_warning "Could not check version for ${name}"
+        return 1
+    fi
+
+    if [[ -n "$latest_version" && "$latest_version" != "$current_version" ]]; then
+        log_update "${name}: ${current_version} → ${latest_version}"
+        ((updates_found++))
+        return 0
+    fi
+
+    return 1
 }
 
-updates_found=0
+# Load version configuration if available
+load_versions() {
+    if [[ -f "$VERSION_FILE" ]]; then
+        # shellcheck source=/dev/null
+        source "$VERSION_FILE"
+        log_info "Loaded version configuration from ${VERSION_FILE}"
+    else
+        log_warning "Version file not found at ${VERSION_FILE}, using hardcoded values"
+    fi
+}
 
-# Check major tools for updates
-echo "🔍 Checking GitHub releases..."
+# Main update checking logic
+main() {
+    echo "======================================"
+    echo " External Tool Update Check"
+    echo " $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "======================================"
+    echo
 
-# Go
-if check_github_release "golang/go" "1.23.9"; then
-    ((updates_found++))
-fi
+    # Load version configuration
+    load_versions
 
-# Node.js (check via NodeSource)
-if check_github_release "nodejs/node" "20.19.2"; then
-    ((updates_found++))
-fi
+    log_info "Starting external tool update checks..."
+    echo
 
-# Rust
-if check_github_release "rust-lang/rust" "1.87.0"; then
-    ((updates_found++))
-fi
+    # Define tools to check with their repositories and current versions
+    declare -A github_tools=(
+        ["golang/go"]="${GO_VERSION:-1.23.9}"
+        ["nodejs/node"]="${NODE_VERSION:-20}.19.2"
+        ["rust-lang/rust"]="${RUST_VERSION:-1.87.0}"
+        ["JetBrains/kotlin"]="${KOTLIN_VERSION:-2.1.10}"
+        ["JuliaLang/julia"]="${JULIA_VERSION:-1.11.5}"
+        ["docker/cli"]="${DOCKER_VERSION:-28.0.4}"
+        ["kubernetes/kubernetes"]="${KUBECTL_VERSION:-1.33.1}"
+        ["helm/helm"]="${HELM_VERSION:-3.18.1}"
+        ["bazelbuild/bazel"]="${BAZEL_VERSION:-8.2.1}"
+        ["kubernetes-sigs/kind"]="${KIND_VERSION:-0.29.0}"
+        ["cli/cli"]="${GH_VERSION:-2.74.0}"
+        ["Kitware/CMake"]="${CMAKE_VERSION:-3.31.6}"
+        ["nvm-sh/nvm"]="${NVM_VERSION:-0.40.3}"
+    )
 
-# Kotlin
-if check_github_release "JetBrains/kotlin" "2.1.10"; then
-    ((updates_found++))
-fi
+    # Check GitHub releases
+    echo "🔍 Checking GitHub releases..."
+    for repo in "${!github_tools[@]}"; do
+        check_github_release "$repo" "${github_tools[$repo]}" || true
+    done
+    echo
 
-# Julia
-if check_github_release "JuliaLang/julia" "1.11.5"; then
-    ((updates_found++))
-fi
+    # Check cloud CLIs (these need custom checking)
+    echo "☁️ Checking Cloud CLI versions..."
 
-# Docker
-if check_github_release "docker/cli" "28.0.4"; then
-    ((updates_found++))
-fi
+    # AWS CLI
+    check_custom_version "AWS CLI" \
+        "curl -s 'https://api.github.com/repos/aws/aws-cli/tags' | jq -r '.[0].name // empty' | sed 's/^v//'" \
+        "${AWS_CLI_VERSION:-2.27.27}" || true
 
-# Kubernetes
-if check_github_release "kubernetes/kubernetes" "1.33.1"; then
-    ((updates_found++))
-fi
+    # Note: Azure CLI and Google Cloud CLI checks would require specific APIs
+    log_info "Azure CLI (current: ${AZURE_CLI_VERSION:-2.73.0}) - manual verification needed"
+    log_info "Google Cloud CLI (current: ${GCP_CLI_VERSION:-524.0.0}) - manual verification needed"
+    echo
 
-# Helm
-if check_github_release "helm/helm" "3.18.1"; then
-    ((updates_found++))
-fi
+    # Check browser versions
+    echo "🌐 Checking browser versions..."
+    log_info "Chrome (current: ${CHROME_VERSION:-137.0.7151.55}) - auto-updated in Dockerfile"
+    log_info "Firefox (current: ${FIREFOX_VERSION:-139.0.1}) - auto-updated in Dockerfile"
+    echo
 
-# Bazel
-if check_github_release "bazelbuild/bazel" "8.2.1"; then
-    ((updates_found++))
-fi
+    # Summary
+    echo "======================================"
+    echo " Update Check Summary"
+    echo "======================================"
+    echo
+    echo "Checks performed: ${checks_performed}"
+    echo "Updates found: ${updates_found}"
+    echo
 
-# Kind
-if check_github_release "kubernetes-sigs/kind" "0.29.0"; then
-    ((updates_found++))
-fi
+    if [[ ${updates_found} -gt 0 ]]; then
+        echo "📋 Available Updates:"
+        for msg in "${update_messages[@]}"; do
+            echo "  - $msg"
+        done
+        echo
+        log_info "✅ Found ${updates_found} potential updates"
 
-# GitHub CLI
-if check_github_release "cli/cli" "2.74.0"; then
-    ((updates_found++))
-fi
+        # Set output for GitHub Actions if available
+        if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+            {
+                echo "has_external_updates=true"
+                echo "update_count=${updates_found}"
+                echo "update_summary=Found ${updates_found} tool updates available"
+            } >> "$GITHUB_OUTPUT"
+        fi
+    else
+        log_info "No external tool updates detected"
 
-# CMake
-if check_github_release "Kitware/CMake" "3.31.6"; then
-    ((updates_found++))
-fi
+        # Set output for GitHub Actions if available
+        if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+            {
+                echo "has_external_updates=false"
+                echo "update_count=0"
+                echo "update_summary=No tool updates available"
+            } >> "$GITHUB_OUTPUT"
+        fi
+    fi
 
-# AWS CLI (check via their API or releases page)
-echo "ℹ️ Checking AWS CLI (current: 2.27.27) - manual verification needed"
+    echo
+    echo "Check completed successfully."
+}
 
-# Azure CLI (check via their releases)
-echo "ℹ️ Checking Azure CLI (current: 2.73.0) - manual verification needed"
-
-# Google Cloud CLI (check via their releases)
-echo "ℹ️ Checking Google Cloud CLI (current: 524.0.0) - manual verification needed"
-
-# Browser versions
-echo "🌐 Checking browser versions..."
-echo "ℹ️ Chrome (current: 137.0.7151.55) - auto-updated in Dockerfile"
-echo "ℹ️ Firefox (current: 139.0.1) - auto-updated in Dockerfile"
-
-# Language version managers
-echo "🔧 Checking version managers..."
-if check_github_release "nvm-sh/nvm" "0.40.3"; then
-    ((updates_found++))
-fi
-
-echo ""
-if [ $updates_found -gt 0 ]; then
-    echo "✅ Found $updates_found potential updates"
-    echo "has_external_updates=true" >> "$GITHUB_OUTPUT" 2>/dev/null || true
-else
-    echo "ℹ️ No external tool updates detected"
-    echo "has_external_updates=false" >> "$GITHUB_OUTPUT" 2>/dev/null || true
-fi
-
-exit 0
+# Run main function
+main "$@"

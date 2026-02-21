@@ -27,7 +27,7 @@ jobs:
       image-tags: ${{ steps.meta.outputs.tags }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Log in to Container Registry
         if: github.event_name != 'pull_request'
@@ -96,7 +96,7 @@ jobs:
         test-type: [basic, tools, languages]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run image tests
         run: |
